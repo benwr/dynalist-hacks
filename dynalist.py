@@ -85,14 +85,14 @@ class Document(File):
 
 class ExistingNode(object):
     def __init__(self, info):
+        self.node_id = info["id"]
         self.content = info["content"]
         self.created = info["created"]
         self.modified = info["modified"]
         self.children = info.get("children") or []
-
+        self.checkbox = info.get("checkbox")
+        self.checked = info.get("checked")
         self.note = info.get("note")
-        if info.get("checkbox"):
-            self.checked = info.get("checked")
         self.color = info.get("color")
         self.heading = info.get("heading")
 
@@ -110,6 +110,7 @@ class InsertNode(object):
             content,
             note=None,
             checked=None,
+            checkbox=None,
             heading=None,
             color=None
             ):
@@ -117,20 +118,36 @@ class InsertNode(object):
         self.content = content
         self.note = note
         self.checked = checked
+        self.checkbox = checkbox
         self.heading = heading
         self.color = color
 
     def from_existing_node(node, new_parent=None):
-        pass
+        parent_id = new_parent or node.parent_id
+        return InsertNode(
+                parent_id,
+                node.content,
+                note=node.note,
+                checked=node.checked,
+                checkbox=node.checkbox,
+                heading=node.heading,
+                color=node.color,
+                )
 
     def as_dict(self):
         result = {"action": "insert"}
-        for k in ["parent_id", "content", "note", "heading", "color"]:
+        atts = [
+                "checkbox",
+                "checked",
+                "parent_id",
+                "content",
+                "note",
+                "heading",
+                "color"
+                ]
+        for k in atts:
             if getattr(self, k) is not None:
                 result[k] = getattr(self, k)
-        if self.checked is not None:
-            result["checkbox"] = True
-            result["checked"] = self.checked
         return result
 
 
