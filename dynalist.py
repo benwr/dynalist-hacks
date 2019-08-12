@@ -4,6 +4,8 @@ you are editing your dynalist from multiple places at once (including with
 multiple copies of this library), you might damage your data!
 """
 
+"""dynalist.py"""
+
 import json
 import textwrap
 
@@ -28,7 +30,15 @@ class File(object):
 
 
 class Folder(File):
-    def __init__(self, session, file_id, children, title=None, permission=4, collapsed=False):
+    def __init__(
+            self,
+            session,
+            file_id,
+            children,
+            title=None,
+            permission=4,
+            collapsed=False,
+            ):
         super().__init__(session, file_id, permission)
         self.children = children
         self.title = title
@@ -59,11 +69,10 @@ class Document(File):
     def contents(self):
         if self._contents is None:
             res = self.session.read_document(self.file_id)
-            check_ok(res)
             self.title = res["title"]
             nodes = {}
-            for child in res["nodes"]:
-                nodes[child["id"]] = ExistingNode(self, child)
+            for node in res["nodes"]:
+                nodes[node["id"]] = ExistingNode(node)
             self._contents = nodes
         return self._contents
 
@@ -79,7 +88,7 @@ class ExistingNode(object):
         self.content = info["content"]
         self.created = info["created"]
         self.modified = info["modified"]
-        self.children = info["children"]
+        self.children = info.get("children") or []
 
         self.note = info.get("note")
         if info.get("checkbox"):
@@ -88,24 +97,35 @@ class ExistingNode(object):
         self.heading = info.get("heading")
 
 
-class InsertionNode(object):
+class SubTree(object):
+    def __init__(self, doc, root_id):
+        self.node = doc.contents[root_id]
+        self.children = [SubTree(doc, child_id) for child_id in self.node.children]
+
+
+class InsertNode(object):
     def __init__(
             self,
+            parent_id,
             content,
             note=None,
-            checked=None, # None, True, or False
+            checked=None,
             heading=None,
-            color=None,
+            color=None
             ):
+        self.parent_id = parent_id
         self.content = content
         self.note = note
         self.checked = checked
         self.heading = heading
         self.color = color
 
+    def from_existing_node(node, new_parent=None):
+        pass
+
     def as_dict(self):
-        result = {}
-        for k in ["content", "note", "heading", "color"]:
+        result = {"action": "insert"}
+        for k in ["parent_id", "content", "note", "heading", "color"]:
             if getattr(self, k) is not None:
                 result[k] = getattr(self, k)
         if self.checked is not None:
@@ -116,7 +136,7 @@ class InsertionNode(object):
 
 def check_ok(res):
     code = res["_code"]
-    if not code == "OK":
+    if not code.lower() == "ok":
         raise DynalistError(code, res["_msg"])
 
 
@@ -143,7 +163,11 @@ class Session(object):
         return self.request(self.DOC_READ, file_id=file_id)
 
     def change_document(self, file_id, changes):
-        return self.request(self.DOC_EDIT, file_id=file_id, changes=changes)
+        return self.request(
+                self.DOC_EDIT,
+                file_id=file_id,
+                changes=[c.as_dict() for c in changes],
+                )
 
     def send_to_inbox(self, index, node):
         return self.request(self.INBOX_ADD, index=index, **node.as_dict())
